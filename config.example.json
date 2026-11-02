@@ -1,0 +1,9 @@
+{
+  "title": "Media Server Dashboard",
+  "port": 8900,
+  "radarr_config": "~/Library/Application Support/Radarr/config.xml",
+  "sonarr_config": "~/.config/Sonarr/config.xml",
+  "prowlarr_config": "~/Library/Application Support/Prowlarr/config.xml",
+  "bazarr_config": "/Applications/bazarr/data/config/config.yaml",
+  "sabnzbd_config": "~/Library/Application Support/SABnzbd/sabnzbd.ini"
+}

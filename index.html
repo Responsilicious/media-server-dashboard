@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a19'/%3E%3Cpath d='M5 21l6-7 5 4 10-10' fill='none' stroke='%233987e5' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0a0e1a; --glass: rgba(255, 255, 255, .065); --edge: rgba(255, 255, 255, .14); --line: rgba(255, 255, 255, .08); --track: rgba(255, 255, 255, .1);
+  --text: #f5f5f7; --muted: rgba(235, 235, 245, .62);
+  --s1: #eef2ff; --s2: #7fe3d0;
+  --good: #30d158; --warning: #fab219; --critical: #ff5f57;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0; color: var(--text); font: 14px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', sans-serif; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+body::before { content: ''; position: fixed; inset: 0; z-index: -1; background:
+  radial-gradient(50vw 50vw at 12% 8%, rgba(64, 110, 255, .38), transparent 70%),
+  radial-gradient(45vw 45vw at 88% 22%, rgba(150, 70, 235, .3), transparent 70%),
+  radial-gradient(55vw 55vw at 72% 100%, rgba(0, 170, 190, .26), transparent 70%),
+  radial-gradient(40vw 40vw at 15% 90%, rgba(225, 80, 130, .16), transparent 70%), var(--bg); }
+#page { max-width: 1500px; margin: 0 auto; padding: 24px 24px 36px; }
+header { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; margin-bottom: 16px; padding: 0 4px; }
+h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.office-link { color: var(--text); text-decoration: none; font-size: 13px; padding: 6px 14px; border-radius: 12px; }
+#facts { display: flex; gap: 4px 16px; flex-wrap: wrap; margin-left: auto; font-size: 12px; color: var(--muted); }
+
+.glass, .card, #tip { background: var(--glass); border: 1px solid var(--edge); -webkit-backdrop-filter: blur(28px) saturate(170%); backdrop-filter: blur(28px) saturate(170%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 10px 30px rgba(0, 0, 0, .22); }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: none; }
+.dot.warning { background: var(--warning); }
+.dot.error { background: var(--critical); }
+[data-tip] { cursor: help; }
+
+#alerts { display: grid; gap: 8px; margin-bottom: 12px; }
+#alerts:empty { display: none; }
+.alert { display: flex; gap: 10px; padding: 9px 14px; border-radius: 14px; }
+.alert b { font-weight: 600; white-space: nowrap; }
+.alert span { min-width: 0; overflow-wrap: anywhere; }
+
+.row { display: grid; gap: 12px; margin-bottom: 12px; }
+.r4 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+[hidden] { display: none !important; }
+.r3 { grid-template-columns: 1fr 1.25fr .85fr; }
+.r2 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+@media (max-width: 1100px) { .r3 { grid-template-columns: 1fr; } }
+.card { border-radius: 20px; padding: 14px 18px; min-width: 0; }
+.card h2 { margin: 0 0 8px; font-size: 13px; font-weight: 500; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.card h2 .right { margin-left: auto; font-weight: 400; font-size: 12px; }
+h3 { margin: 12px 0 2px; font-size: 12px; font-weight: 500; color: var(--muted); }
+h3:first-child { margin-top: 0; }
+
+.mini { display: flex; align-items: center; gap: 14px; padding: 10px 16px; }
+.mini > div:first-child { flex: 1 1 58%; min-width: 0; }
+.mini h2 { margin-bottom: 1px; }
+.hero { font-size: 19px; font-weight: 600; line-height: 1.2; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero small { display: block; font-size: 11px; font-weight: 400; letter-spacing: 0; color: var(--muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; }
+.chart { position: relative; flex: 1 1 42%; min-width: 0; height: 44px; touch-action: none; }
+.chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.legend { display: flex; gap: 10px; font-size: 11px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 2px; vertical-align: middle; margin-right: 4px; border-radius: 1px; }
+#tip { position: fixed; display: none; pointer-events: none; z-index: 5; max-width: 340px; background: rgba(40, 42, 54, .78); border-radius: 12px; padding: 7px 11px; font-size: 12px; white-space: pre-line; }
+#tip div { display: flex; align-items: center; gap: 6px; }
+#tip i { width: 10px; height: 2px; }
+#tip b { font-weight: 600; }
+
+#services { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.service { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 16px; min-width: 0; }
+.service b { flex: 1; min-width: 0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.service span { font-size: 12px; color: var(--muted); }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 10px; margin-bottom: 4px; }
+.tile b { display: block; font-size: 16px; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile span { font-size: 12px; color: var(--muted); }
+
+.rows { list-style: none; margin: 0; padding: 0; }
+.rows li { display: flex; align-items: baseline; gap: 10px; padding: 5px 0; border-top: 1px solid var(--line); }
+.rows li:first-child { border-top: 0; }
+.rows .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rows .m { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.who { display: inline-block; margin-right: 4px; padding: 1px 8px; border-radius: 8px; font-weight: 600; color: #0a0e1a; }
+.empty { color: var(--muted); padding: 4px 0; }
+.meter { margin-top: 14px; }
+.meter:first-of-type { margin-top: 2px; }
+.meter .top { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.track { height: 14px; border-radius: 7px; background: var(--track); overflow: hidden; }
+.fill { height: 100%; border-radius: 7px; background: rgba(245, 245, 247, .82); }
+.fill.warning { background: var(--warning); }
+.fill.error { background: var(--critical); }
+
+.posters { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 12px; }
+.poster { min-width: 0; }
+.poster .img { aspect-ratio: 2 / 3; border-radius: 10px; background: var(--track); overflow: hidden; }
+.poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.poster b { display: block; margin-top: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.poster span { display: block; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+<div id="page">
+  <header><h1>{{TITLE}}</h1><span id="overall"></span><div id="facts"></div><a class="glass office-link" href="/office">Office →</a></header>
+  <div id="alerts"></div>
+  <div class="row r4">
+    <section class="card mini"><div><h2>CPU</h2><div class="hero" id="cpuV">-</div></div><div class="chart" id="cpuC"></div></section>
+    <section class="card mini"><div><h2>Memory</h2><div class="hero" id="memV">-</div></div><div class="chart" id="memC"></div></section>
+    <section class="card mini"><div><h2>Network<span class="right legend"><span><i style="background:var(--s1)"></i>Down</span><span><i style="background:var(--s2)"></i>Up</span></span></h2><div class="hero" id="netV">-</div></div><div class="chart" id="netC"></div></section>
+    <section class="card mini"><div><h2>Downloads<span class="right" id="sabState"></span></h2><div class="hero" id="sabV">-</div></div><div class="chart" id="sabC"></div></section>
+  </div>
+  <section class="row" id="services" aria-label="Services"></section>
+  <div class="row r3" id="middle">
+    <section class="card" id="cinemaCard"><h2>Home Cinema</h2><div id="cinema"></div></section>
+    <section class="card"><h2>Download queue</h2><div id="queue"></div></section>
+    <section class="card"><h2>Drives</h2><div id="drives"></div></section>
+  </div>
+  <div class="row r2">
+    <section class="card"><h2>Recently added movies<span class="right" id="radarrSum"></span></h2><div id="movies"></div></section>
+    <section class="card"><h2>Recently added TV shows<span class="right" id="sonarrSum"></span></h2><div id="shows"></div></section>
+  </div>
+  <div class="row"><section class="card"><h2>Coming up<span class="right">next 14 days</span></h2><div id="upcoming"></div></section></div>
+</div>
+<div id="tip"></div>
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const num = (n) => Number(n || 0).toLocaleString('en-GB');
+function bytes(b, digits = 1) {
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0, n = b || 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i < 2 ? Math.round(n) : n.toFixed(digits)) + ' ' + u[i];
+}
+const rate = (b) => bytes(b) + '/s';
+function span(sec) {
+  const d = Math.floor(sec / 86400), h = Math.floor(sec / 3600) % 24, m = Math.floor(sec / 60) % 60;
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+}
+const ago = (t) => {
+  if (!t) return '';
+  const when = new Date(t), sec = (Date.now() - when) / 1000;
+  if (sec < 60) return 'just now';
+  if (sec < 7 * 86400) return span(sec).split(' ')[0] + ' ago';
+  return when.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+};
+const day = (t) => new Date(t).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const rows = (items, row, none) => items.length ? `<ul class="rows">${items.map(row).join('')}</ul>` : `<div class="empty">${esc(none)}</div>`;
+const tile = (v, k) => `<div class="tile"><b>${esc(v)}</b><span>${esc(k)}</span></div>`;
+const pill = (cls, text) => `<span class="pill"><i class="dot ${cls}"></i>${esc(text)}</span>`;
+const level = (pct) => pct >= 95 ? 'error' : pct >= 85 ? 'warning' : '';
+
+// Line charts stretched across the last 5 minutes, or whatever has been sampled so far. Hover anywhere for every series at that moment.
+const charts = {};
+function chart(id, series, fmt, fixedMax) {
+  const el = $(id), W = el.clientWidth || 140, H = el.clientHeight || 44, top = 4, bottom = H - 1;
+  const t = last.history.t;
+  const peak = fixedMax || Math.max(1, ...series.flatMap((s) => s.values));
+  const x = (i) => W * i / Math.max(1, t.length - 1);
+  const y = (v) => bottom - (v / peak) * (bottom - top);
+  const path = (s) => s.values.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1)).join('');
+  const lines = series.map((s) => `<path d="${path(s)}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`).join('');
+  const now = series.map((s) => s.values.length ? `<circle cx="${x(s.values.length - 1) - 1}" cy="${y(s.values[s.values.length - 1])}" r="3" fill="${s.color}"/>` : '').join('');
+  const label = series.map((s) => `${s.name} ${fmt(s.values[s.values.length - 1] || 0)}`).join(', ');
+  el.innerHTML = `<svg role="img" aria-label="${esc(el.parentElement.querySelector('h2').firstChild.textContent)} over 5 minutes, now ${esc(label)}, highest ${esc(fmt(peak))}">
+    <line x1="0" x2="${W}" y1="${bottom}" y2="${bottom}" stroke="rgba(255,255,255,.14)"/>${lines}${now}
+    <line class="cross" y1="${top}" y2="${bottom}" stroke="rgba(235,235,245,.62)" visibility="hidden"/></svg>`;
+  charts[id] = { series, fmt, x, W };
+}
+
+const tip = $('tip');
+function hover(e) {
+  const el = e.currentTarget, c = charts[el.id];
+  if (!c) return;
+  const r = el.getBoundingClientRect(), t = last.history.t;
+  let i = Math.round((e.clientX - r.left) / c.W * (t.length - 1));
+  i = Math.max(0, Math.min(t.length - 1, i));
+  const cross = el.querySelector('.cross');
+  cross.setAttribute('x1', c.x(i)); cross.setAttribute('x2', c.x(i)); cross.setAttribute('visibility', 'visible');
+  tip.replaceChildren();
+  const when = document.createElement('div');
+  when.textContent = new Date(t[i]).toLocaleTimeString('en-GB');
+  when.style.color = 'var(--muted)';
+  tip.append(when);
+  for (const s of c.series) {
+    const row = document.createElement('div'), key = document.createElement('i'), val = document.createElement('b'), name = document.createElement('span');
+    key.style.background = s.color; val.textContent = c.fmt(s.values[i] || 0); name.textContent = s.name;
+    row.append(key, val, name); tip.append(row);
+  }
+  tip.style.display = 'block';
+  tip.style.left = Math.min(e.clientX + 12, innerWidth - tip.offsetWidth - 8) + 'px';
+  tip.style.top = e.clientY - tip.offsetHeight - 10 + 'px';
+}
+for (const id of ['cpuC', 'memC', 'netC', 'sabC']) {
+  $(id).addEventListener('pointermove', hover);
+  $(id).addEventListener('pointerleave', () => { tip.style.display = 'none'; const c = $(id).querySelector('.cross'); if (c) c.setAttribute('visibility', 'hidden'); });
+}
+
+// Popups for anything marked with data-tip, such as what is wrong with a service.
+function showTip(e) {
+  const el = e.target.closest && e.target.closest('[data-tip]');
+  if (!el) return;
+  tip.textContent = el.dataset.tip;
+  tip.style.display = 'block';
+  const r = el.getBoundingClientRect();
+  tip.style.left = Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8)) + 'px';
+  tip.style.top = (r.top - tip.offsetHeight - 8 < 8 ? r.bottom + 8 : r.top - tip.offsetHeight - 8) + 'px';
+}
+function hideTip(e) { if (e.target.closest && e.target.closest('[data-tip]')) tip.style.display = 'none'; }
+document.addEventListener('mouseover', showTip);
+document.addEventListener('mouseout', hideTip);
+document.addEventListener('focusin', showTip);
+document.addEventListener('focusout', hideTip);
+
+// "Next up" list for a popup: the next few downloads in SABnzbd's order.
+function nextTip(list) {
+  if (!list || !list.length) return '';
+  return 'Next up\n' + list.map((x, i) => `${i + 1}. ${x.title}${x.pct ? ` · ${x.pct}%` : ''}${x.size ? ` · ${x.size}` : ''}`).join('\n');
+}
+
+function service(v) {
+  const bad = v.issues.some((a) => a.level === 'error');
+  const cls = !v.up || bad ? 'error' : v.issues.length ? 'warning' : '';
+  const word = !v.up ? 'Down' : bad ? 'Error' : v.issues.length ? 'Warning' : 'Running';
+  const tipText = [v.issues.map((a) => a.message).join('\n'), nextTip(v.next)].filter(Boolean).join('\n\n');
+  return `<div class="service glass"${tipText ? ` data-tip="${esc(tipText)}" tabindex="0"` : ''}><i class="dot ${cls}"></i><b>${esc(v.name)}</b><span>${word}</span></div>`;
+}
+
+// Each profile keeps its colour from its place in Home Cinema's profile list, so a colour always means the same person.
+const whoColors = ['#7fe3d0', '#f6d77a', '#c9b8ff', '#a8d8ff', '#f7b8d4', '#d7f08a'];
+function who(name) {
+  const i = last.cinema.profiles.indexOf(name);
+  return `<span class="who" style="background:${whoColors[Math.max(0, i) % whoColors.length]}">${esc(name)}</span>`;
+}
+
+function posters(items, none) {
+  if (!items.length) return `<div class="empty">${esc(none)}</div>`;
+  return `<div class="posters">${items.map((m) => `<div class="poster" title="${esc(m.title)}"><div class="img">${m.poster ? `<img src="${esc(m.poster)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}</div><b>${esc(m.title)}</b><span>${esc(m.sub || m.quality || m.year || '')}</span><span>${esc(ago(m.when))}</span></div>`).join('')}</div>`;
+}
+
+let last = null, html = {};
+// Only touch what changed, so hovering and poster images aren't disturbed by each refresh.
+function put(id, value) { if (html[id] !== value) { html[id] = value; $(id).innerHTML = value; } }
+
+function render(d) {
+  last = d;
+  const s = d.system, h = d.history, mem = s.memory || {}, net = d.network, cin = d.cinema, sab = d.sab;
+  document.title = (d.alerts.some((a) => a.level === 'error') ? '● ' : '') + d.title;
+  const errors = d.alerts.filter((a) => a.level === 'error').length;
+  const allIssues = d.alerts.map((a) => `${a.source}: ${a.message}`).join('\n');
+  put('overall', d.alerts.length ? `<span data-tip="${esc(allIssues)}" tabindex="0">${pill(errors ? 'error' : 'warning', `${d.alerts.length} ${d.alerts.length === 1 ? 'issue' : 'issues'}`)}</span>` : pill('', 'All good'));
+  put('facts', [
+    s.booted && `up ${span((d.now - s.booted) / 1000)}`, net.online === undefined ? '' : net.online ? `internet ${Math.round(net.ping)} ms` : 'offline', net.vpn && 'VPN on',
+  ].filter(Boolean).map((f) => `<span>${esc(f)}</span>`).join(''));
+  // Service problems pop up on the service itself and missing drives show under Drives, so only the rest gets a banner.
+  const elsewhere = new Set([...d.services.map((v) => v.name), 'Drives']);
+  put('alerts', d.alerts.filter((a) => !elsewhere.has(a.source)).map((a) => `<div class="alert glass"><b>${pill(a.level === 'error' ? 'error' : 'warning', a.source)}</b><span>${esc(a.message)}</span></div>`).join(''));
+
+  const cpu = h.cpu[h.cpu.length - 1] || 0;
+  $('cpuV').innerHTML = `${cpu}%<small>load ${s.load ? s.load[0].toFixed(1) : '-'} of ${s.cores || '-'} cores${s.speed_limit < 100 ? ` · limited to ${s.speed_limit}%` : ''}</small>`;
+  $('memV').innerHTML = mem.total ? `${bytes(mem.used)}<small>of ${bytes(mem.total, 0)} · swap ${bytes(mem.swap_used)}</small>` : '-';
+  $('netV').innerHTML = `↓ ${rate(h.rx[h.rx.length - 1])}<small>↑ ${rate(h.tx[h.tx.length - 1])}</small>`;
+  $('sabV').innerHTML = sab.ok ? `${rate(sab.speed)}<small>${sab.queueTotal} in queue${sab.queueTotal ? ` · ${bytes(sab.left)} left · ${esc(sab.eta)}` : ''}</small>` : 'Not responding';
+  const sabNext = nextTip((d.services.find((v) => v.name === 'SABnzbd') || {}).next);
+  if (sabNext) { $('sabV').dataset.tip = sabNext; $('sabV').tabIndex = 0; } else { delete $('sabV').dataset.tip; $('sabV').removeAttribute('tabindex'); }
+  put('sabState', !sab.ok ? pill('error', 'Down') : sab.paused ? pill('warning', 'Paused') : pill('', sab.speed > 0 ? 'Downloading' : 'Idle'));
+
+  const pct = (v) => Math.round(v) + '%';
+  chart('cpuC', [{ name: 'CPU', color: 'var(--s1)', values: h.cpu }], pct, 100);
+  chart('memC', [{ name: 'Memory', color: 'var(--s1)', values: h.mem }], pct, 100);
+  chart('netC', [{ name: 'Down', color: 'var(--s1)', values: h.rx }, { name: 'Up', color: 'var(--s2)', values: h.tx }], rate);
+  chart('sabC', [{ name: 'Speed', color: 'var(--s1)', values: h.sab }], rate);
+
+  put('services', d.services.map(service).join(''));
+
+  const missing = (cin.missing_drives || []).map((n) => `<div class="meter"><div class="top"><span>${esc(n)}</span>${pill('error', 'Not connected')}</div><div class="track"></div></div>`).join('');
+  put('drives', d.disks.map((x) => { const used = (x.total - x.free) / x.total * 100; return `<div class="meter"><div class="top"><span>${esc(x.name)}</span><span class="muted small">${bytes(x.free)} free of ${bytes(x.total, 0)}</span></div><div class="track"><div class="fill ${level(used)}" style="width:${used}%"></div></div></div>`; }).join('') + missing);
+
+  // Home Cinema is optional; without it the queue and drives share the row.
+  $('cinemaCard').hidden = !cin.enabled;
+  $('middle').className = cin.enabled ? 'row r3' : 'row r2';
+  put('cinema', cin.watched ? `<h3>Open right now</h3>${rows(cin.streams, (t) => `<li><span class="t" title="${esc(t.title)}">${esc(t.title)}</span><span class="m">${t.who ? `${who(t.who)}${t.pct}%` : esc(t.service || 'Unknown')}</span></li>`, 'Nothing is playing')}
+    <h3>Latest watched</h3>${rows(cin.watched, (w) => `<li><span class="t" title="${esc(w.title)}">${esc(w.title)}</span><span class="m">${who(w.who)}${w.pct}% · ${esc(ago(w.when))}</span></li>`, 'Nothing watched yet')}` : '<div class="empty">Reading…</div>');
+
+  put('queue', !sab.ok ? '<div class="empty">SABnzbd is not responding</div>' : `<div class="tiles">${tile(bytes(sab.totals.day), 'Today')}${tile(bytes(sab.totals.week), 'This week')}${tile(bytes(sab.totals.month), 'This month')}${tile(bytes(sab.totals.total), 'All time')}</div>
+    <h3>In SABnzbd</h3>${rows(sab.queue.slice(0, 8), (q) => `<li><span class="t" title="${esc(q.title)}">${esc(q.title)}</span><span class="m">${Math.round(q.pct)}% · ${esc(q.left)}</span></li>`, 'Queue is empty')}`);
+
+  const R = d.radarr, S = d.sonarr;
+  put('radarrSum', R.ok ? esc(`${num(R.library.have)} of ${num(R.library.total)} on disk · ${bytes(R.library.size)} · ${num(R.missing)} missing`) : pill('error', 'Radarr down'));
+  put('sonarrSum', S.ok ? esc(`${num(S.library.total)} series · ${num(S.library.have)} of ${num(S.library.episodes)} episodes · ${bytes(S.library.size)}`) : pill('error', 'Sonarr down'));
+  put('movies', posters(R.recent || [], 'Nothing added yet'));
+  put('shows', posters(S.recent || [], 'Nothing added yet'));
+  put('upcoming', rows(d.upcoming, (u) => `<li><span class="m" style="width:96px">${esc(day(u.when))}</span><span class="t">${esc(u.title)}</span><span class="m">${esc(u.kind)}</span></li>`, 'Nothing scheduled'));
+}
+
+async function tick() {
+  if (document.hidden) return;
+  try {
+    const r = await fetch('/api/data', { cache: 'no-store' });
+    if (r.status === 401) { location.href = '/login'; return; }
+    render(await r.json());
+  } catch { put('overall', pill('error', 'Dashboard not responding')); }
+}
+document.addEventListener('visibilitychange', tick);
+addEventListener('resize', () => { if (last) render(last); });
+tick();
+setInterval(tick, 2000);
+</script>
+</body>
+</html>

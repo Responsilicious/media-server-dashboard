@@ -250,18 +250,105 @@ function fitText(g, text, max) {
   while (text.length > 1 && g.measureText(text + '…').width > max) text = text.slice(0, -1);
   return text.trimEnd() + '…';
 }
-// The TV above the couch shows who is watching: a circle per person that lights up while they watch.
-const BOARD_W = 560, BOARD_H = 260;
+// The TV above the couch: a slideshow of whatever is playing (poster, title, who, how far in).
+// With nothing playing it shows Home Cinema's people as circles, or just says so.
+const BOARD_W = 560, BOARD_H = 260, SLIDE_MS = 7000, FADE_MS = 700;
+const TV_FONT = '-apple-system, Helvetica, sans-serif';
 function boardCircles(n) {
   const gap = Math.min(150, (BOARD_W - 80) / Math.max(1, n)), x0 = BOARD_W / 2 - (gap * (n - 1)) / 2;
   return Array.from({ length: n }, (_, i) => ({ cx: x0 + i * gap, cy: 132, r: 44 }));
 }
-const board = canvasTexture(BOARD_W * 2, BOARD_H * 2, (g, w, h, d) => {
+// Poster pictures for the slides, kept as images so the one TV texture can draw them.
+const tvImages = new Map();
+const posterSrc = (url) => (url.startsWith('/poster?') ? url : '/poster?u=' + encodeURIComponent(url));
+function tvImage(url) {
+  if (!url) return null;
+  let e = tvImages.get(url);
+  if (!e) {
+    e = { img: new Image(), ok: false };
+    e.img.onload = () => { e.ok = true; tv.dirty = true; };
+    e.img.src = posterSrc(url);
+    tvImages.set(url, e);
+    while (tvImages.size > 24) tvImages.delete(tvImages.keys().next().value);
+  }
+  return e.ok ? e.img : null;
+}
+function roundRect(g, x, y, w, h, r) { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); }
+function wrapText(g, text, max, lines) {
+  const out = [];
+  let rest = String(text || '');
+  while (rest && out.length < lines) {
+    if (out.length === lines - 1 || g.measureText(rest).width <= max) { out.push(fitText(g, rest, max)); break; }
+    let cut = rest.length;
+    while (cut > 1 && g.measureText(rest.slice(0, cut)).width > max) cut = rest.lastIndexOf(' ', cut - 1) > 0 ? rest.lastIndexOf(' ', cut - 1) : cut - 1;
+    out.push(rest.slice(0, cut).trimEnd()); rest = rest.slice(cut).trimStart();
+  }
+  return out;
+}
+function drawSlide(g, s, alpha) {
+  g.save();
+  g.globalAlpha = alpha;
+  const img = tvImage(s.poster);
+  if (img) { // the poster, dimmed and stretched across the screen as a backdrop
+    g.save(); g.globalAlpha = alpha * 0.22; g.filter = 'blur(14px)';
+    const k = BOARD_W / img.width; g.drawImage(img, 0, (BOARD_H - img.height * k) / 2, BOARD_W, img.height * k);
+    g.restore();
+  }
+  const px = 26, py = 22, ph = BOARD_H - 44, pw = ph * 2 / 3;
+  g.save(); roundRect(g, px, py, pw, ph, 10); g.clip();
+  if (img) {
+    const k = Math.max(pw / img.width, ph / img.height), iw = img.width * k, ih = img.height * k;
+    g.drawImage(img, px + (pw - iw) / 2, py + (ph - ih) / 2, iw, ih);
+  } else {
+    const gr = g.createLinearGradient(0, py, 0, py + ph); gr.addColorStop(0, '#3a2a6b'); gr.addColorStop(1, '#e0607e');
+    g.fillStyle = gr; g.fillRect(px, py, pw, ph);
+    g.font = `64px ${TV_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(s.kind === 'Audio' ? '🎵' : '🎬', px + pw / 2, py + ph / 2);
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  }
+  g.restore();
+  const x = px + pw + 26, max = BOARD_W - x - 26;
+  g.fillStyle = s.paused ? '#f6d77a' : '#30d158';
+  if (s.paused) { g.fillRect(x, 32, 5, 16); g.fillRect(x + 9, 32, 5, 16); }
+  else { g.beginPath(); g.moveTo(x, 32); g.lineTo(x + 14, 40); g.lineTo(x, 48); g.fill(); }
+  g.font = `600 17px ${TV_FONT}`; g.fillText(s.paused ? 'PAUSED' : 'NOW PLAYING', x + 24, 47);
+  g.fillStyle = '#ffffff'; g.font = `700 30px ${TV_FONT}`;
+  const title = wrapText(g, s.title, max, 2);
+  title.forEach((t, i) => g.fillText(t, x, 88 + i * 34));
+  let y = 88 + title.length * 34;
+  g.fillStyle = 'rgba(235,235,245,.72)'; g.font = `500 19px ${TV_FONT}`;
+  if (s.sub) { g.fillText(fitText(g, s.sub, max), x, y); y += 28; }
+  const who = [s.who, s.device].filter(Boolean).join(' · ');
+  if (who) { g.fillStyle = 'rgba(235,235,245,.9)'; g.fillText(fitText(g, who, max), x, Math.max(y, 170)); }
+  if (s.pct != null) {
+    const by = BOARD_H - 42;
+    g.fillStyle = 'rgba(255,255,255,.14)'; roundRect(g, x, by, max, 8, 4); g.fill();
+    g.fillStyle = s.paused ? '#f6d77a' : '#30d158'; roundRect(g, x, by, Math.max(8, max * Math.min(100, s.pct) / 100), 8, 4); g.fill();
+    g.fillStyle = 'rgba(235,235,245,.6)'; g.font = `500 15px ${TV_FONT}`;
+    g.fillText(`${s.pct}%${s.method ? ` · ${s.method}` : ''}`, x, by - 10);
+  }
+  g.restore();
+}
+const tv = { slides: [], viewers: [], index: 0, prev: null, since: 0, dirty: true, key: '' };
+const board = canvasTexture(BOARD_W * 2, BOARD_H * 2, (g, w, h, d, fade = 1) => {
   g.setTransform(2, 0, 0, 2, 0, 0);
-  const font = '-apple-system, Helvetica, sans-serif';
   g.fillStyle = '#1a1730'; g.fillRect(0, 0, BOARD_W, BOARD_H);
-  g.fillStyle = '#f6d77a'; g.font = `600 26px ${font}`; g.fillText('WATCHING', 28, 44);
   if (!d) return;
+  if (d.slides.length) {
+    // the old title fades out, then the new one fades in, so the two never sit on top of each other
+    if (d.prev != null && d.slides[d.prev] && fade < 0.5) drawSlide(g, d.slides[d.prev], 1 - fade * 2);
+    else drawSlide(g, d.slides[d.index] || d.slides[0], d.prev != null ? fade * 2 - 1 : 1);
+    if (d.slides.length > 1) d.slides.forEach((_, i) => { // which slide this is
+      g.beginPath(); g.arc(BOARD_W - 26 - (d.slides.length - 1 - i) * 16, 40, 4.5, 0, Math.PI * 2);
+      g.fillStyle = i === d.index ? '#ffffff' : 'rgba(255,255,255,.28)'; g.fill();
+    });
+    return;
+  }
+  g.fillStyle = '#f6d77a'; g.font = `600 26px ${TV_FONT}`; g.fillText(d.viewers.length ? 'WATCHING' : 'NOW PLAYING', 28, 44);
+  if (!d.viewers.length) {
+    g.fillStyle = 'rgba(235,235,245,.6)'; g.font = `500 24px ${TV_FONT}`; g.textAlign = 'center';
+    g.fillText('Nothing is playing 🍿', BOARD_W / 2, BOARD_H / 2 + 20); g.textAlign = 'left';
+    return;
+  }
   boardCircles(d.viewers.length).forEach(({ cx, cy, r }, i) => {
     const v = d.viewers[i];
     g.save();
@@ -272,11 +359,30 @@ const board = canvasTexture(BOARD_W * 2, BOARD_H * 2, (g, w, h, d) => {
     g.lineWidth = 3; g.strokeStyle = v.watching ? '#9ff5b8' : 'rgba(255,255,255,.22)';
     g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillStyle = v.watching ? '#06240f' : 'rgba(233,236,242,.75)'; g.font = `700 34px ${font}`; g.fillText(v.initials, cx, cy + 2);
-    g.fillStyle = v.watching ? '#e9ecf2' : 'rgba(235,235,245,.6)'; g.font = `500 19px ${font}`; g.fillText(v.name, cx, cy + r + 24);
+    g.fillStyle = v.watching ? '#06240f' : 'rgba(233,236,242,.75)'; g.font = `700 34px ${TV_FONT}`; g.fillText(v.initials, cx, cy + 2);
+    g.fillStyle = v.watching ? '#e9ecf2' : 'rgba(235,235,245,.6)'; g.font = `500 19px ${TV_FONT}`; g.fillText(v.name, cx, cy + r + 24);
     g.textAlign = 'left'; g.textBaseline = 'alphabetic';
   });
 });
+// Called every frame: move to the next slide every few seconds, cross-fading, and redraw only when something changed.
+function updateTV(now) {
+  const n = tv.slides.length;
+  if (n > 1 && now - tv.since > SLIDE_MS) { tv.prev = tv.index; tv.index = (tv.index + 1) % n; tv.since = now; }
+  const fading = tv.prev != null && now - tv.since < FADE_MS;
+  if (!fading && tv.prev != null) { tv.prev = null; tv.dirty = true; }
+  if (fading || tv.dirty) { tv.dirty = false; board.redraw(tv, fading ? (now - tv.since) / FADE_MS : 1); }
+}
+function showOnTV(slides, viewers) {
+  const key = JSON.stringify([slides, viewers]);
+  if (key === tv.key) return;
+  const current = tv.slides[tv.index];
+  tv.key = key; tv.slides = slides; tv.viewers = viewers; tv.prev = null; tv.dirty = true;
+  slides.forEach((st) => tvImage(st.poster)); // load every poster now, so each slide has its picture when it comes round
+  // stay on the same title when the list changes around it
+  const keep = current ? slides.findIndex((s) => s.title === current.title && s.who === current.who) : -1;
+  if (keep >= 0) tv.index = keep;
+  else { tv.index = 0; tv.since = performance.now(); }
+}
 rbox(2.95, 1.42, 0.1, 0.06, '#2a2640', 7.35, 2.15, -8.95);
 const boardScreen = plane(2.8, 1.3, new THREE.MeshStandardMaterial({ map: board, emissiveMap: board, emissive: '#ffffff', emissiveIntensity: 0.55 }), 7.35, 2.15, -8.89);
 
@@ -301,11 +407,13 @@ function showPosters(items) {
     const url = m && m.poster;
     if (url === p.url) return;
     p.url = url;
-    if (!url) { p.material.map = null; p.material.color.set('#2c3456'); p.material.needsUpdate = true; return; }
-    posterLoader.load('/poster?u=' + encodeURIComponent(url), (tex) => {
-      if (p.url !== url) return;
+    // the old picture's texture is freed as soon as it's replaced, so the GPU memory doesn't grow over the day
+    if (!url) { if (p.material.map) p.material.map.dispose(); p.material.map = null; p.material.color.set('#2c3456'); p.material.needsUpdate = true; return; }
+    posterLoader.load(posterSrc(url), (tex) => {
+      if (p.url !== url) { tex.dispose(); return; }
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 8;
+      if (p.material.map) p.material.map.dispose();
       p.material.map = tex; p.material.color.set('#ffffff'); p.material.needsUpdate = true;
     });
   });
@@ -1233,9 +1341,10 @@ function render(d) {
     return { name, initials: name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase(), watching: !!st, title: st && st.title };
   });
   showPosters(recent);
-  const key = JSON.stringify(viewers);
-  if (key !== board.key) { board.key = key; board.redraw({ viewers }); }
-  board.viewers = viewers;
+  // the TV's slides: everything Jellyfin is playing, then anything open in Home Cinema
+  const slides = [...((d.jellyfin && d.jellyfin.streams) || []),
+    ...streams.map((st) => ({ title: st.title, who: st.who || st.service, device: 'Home Cinema', pct: st.pct ?? null, poster: null, kind: 'Movie' }))];
+  showOnTV(slides, viewers);
   // the parcel pile: hover it to see what's next
   pileLabel.dataset.tip = queueText(sab);
 }
@@ -1281,8 +1390,14 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   pointer.set((e.clientX - r.left) / r.width * 2 - 1, 1 - (e.clientY - r.top) / r.height * 2);
   ray.setFromCamera(pointer, camera);
   const hit = ray.intersectObjects([...Object.values(people).filter((p) => p.root.visible).map((p) => p.root), ...parcels.filter((b) => b.visible), ...wallPosters.map((p) => p.mesh), boardScreen], true)[0];
+  if (hit && hit.object === boardScreen && tv.slides.length) {
+    const st = tv.slides[tv.index];
+    renderer.domElement.style.cursor = tv.slides.length > 1 ? 'pointer' : '';
+    const how = [st.pct != null ? `${st.pct}% in` : '', st.paused ? 'paused' : '', st.method].filter(Boolean).join(' · ');
+    return showTip([st.title, st.sub, [st.who, st.device].filter(Boolean).join(' on '), how, tv.slides.length > 1 ? `${tv.index + 1} of ${tv.slides.length} playing · click for the next` : ''].filter(Boolean).join('\n'), e.clientX, e.clientY);
+  }
   if (hit && hit.object === boardScreen) {
-    const px = hit.uv.x * BOARD_W, py = (1 - hit.uv.y) * BOARD_H, viewers = board.viewers || [];
+    const px = hit.uv.x * BOARD_W, py = (1 - hit.uv.y) * BOARD_H, viewers = tv.viewers;
     const i = boardCircles(viewers.length).findIndex(({ cx, cy, r }) => Math.hypot(px - cx, py - cy) <= r + 4);
     const v = viewers[i];
     renderer.domElement.style.cursor = v && v.watching ? 'pointer' : '';
@@ -1298,6 +1413,16 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   else hideTip();
 });
 renderer.domElement.addEventListener('pointerleave', hideTip);
+// clicking the TV skips to the next title (a drag to turn the camera isn't a click)
+let downAt = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('click', (e) => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5 || tv.slides.length < 2) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  pointer.set((e.clientX - r.left) / r.width * 2 - 1, 1 - (e.clientY - r.top) / r.height * 2);
+  ray.setFromCamera(pointer, camera);
+  if (ray.intersectObject(boardScreen)[0]) { tv.prev = tv.index; tv.index = (tv.index + 1) % tv.slides.length; tv.since = performance.now(); }
+});
 
 const clock = new THREE.Clock();
 function frame() {
@@ -1306,6 +1431,7 @@ function frame() {
   code.offset.y = (code.offset.y + dt * 0.08) % 1;
   rally(t);
   animateDataCenter(dt);
+  updateTV(performance.now());
   const now = new Date();
   const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   if (hhmm !== clockFace.shown) { clockFace.shown = hhmm; clockFace.redraw(hhmm); }
@@ -1319,7 +1445,7 @@ frame();
 document.addEventListener('visibilitychange', tick);
 tick();
 setInterval(tick, 2000);
-window.office = { people, render, controls, board, renderer, scene, camera };
+window.office = { people, render, controls, board, tv, renderer, scene, camera };
 </script>
 </body>
 </html>

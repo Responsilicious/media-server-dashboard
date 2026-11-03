@@ -52,6 +52,16 @@ def payload(title):
     watched = [{"who": PEOPLE[i % 3], "title": f"{SHOWS[i % 4][0]} {SHOWS[i % 4][1]}", "year": None, "pct": 100 - i * 13,
                 "when": ms - (i + 1) * 3_600_000, "now": False} for i in range(5)]
 
+    # Jellyfin: one to three things playing at once, so the TV's slideshow has something to flip through
+    jf = [
+        {"title": SHOWS[0][0], "sub": f"{SHOWS[0][1]} · The Long Tide", "kind": "Episode", "who": "Alex", "device": "Living Room TV", "client": "Jellyfin Android TV",
+         "pct": round(wave(now, 150, 5, 95, 1)), "paused": False, "poster": "/demo-poster/s0.svg", "method": "Direct play"},
+        {"title": MOVIES[2][0], "sub": str(MOVIES[2][1]), "kind": "Movie", "who": "Sam", "device": "iPad", "client": "Jellyfin Mobile",
+         "pct": round(wave(now, 260, 10, 90, 2)), "paused": phase == 1, "poster": "/demo-poster/m2.svg", "method": "Transcoding"},
+        {"title": SHOWS[2][0], "sub": f"{SHOWS[2][1]} · Sourdough Season", "kind": "Episode", "who": "Jordan", "device": "Chrome", "client": "Jellyfin Web",
+         "pct": round(wave(now, 120, 5, 95, 3)), "paused": False, "poster": "/demo-poster/s2.svg", "method": "Direct play"},
+    ][: (1, 3, 2, 0)[phase]]
+
     activity = {
         "Radarr": "Waiting on 3 downloads" if phase in (0, 1) else None,
         "Sonarr": "RefreshMonitoredDownloads" if phase in (1, 2) else None,
@@ -75,6 +85,7 @@ def payload(title):
                    "memory": {"total": 16 * GB, "used": int(mem[-1] / 100 * 16 * GB), "free_level": 40, "swap_total": 0, "swap_used": 0}},
         "services": services,
         "cinema": {"enabled": True, "ok": True, "converting": 0, "profiles": PEOPLE, "streams": streams, "watched": watched, "missing_drives": []},
+        "jellyfin": {"enabled": True, "ok": True, "streams": jf},
         "sab": {"ok": True, "version": "4.3.3", "paused": False, "speed": sab[-1], "left": 21 * GB, "eta": "0:34:10", "queueTotal": 12, "queue": queue, "failed": 0,
                 "totals": {"day": 38 * GB, "week": 212 * GB, "month": 840 * GB, "total": 9800 * GB}},
         "radarr": {"ok": True, "version": "5.0", "library": {"total": 412, "have": 398, "size": 3900 * GB}, "missing": 14,

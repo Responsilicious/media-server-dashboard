@@ -2,7 +2,7 @@
 """Media server dashboard and 3D office for a Mac. Standard library only.
 
 Watches the machine and the apps on it strictly from the outside: system tools and each app's own API
-(Radarr, Sonarr, Prowlarr, Bazarr, SABnzbd). Other devices on the network need the password in password.txt;
+(Radarr, Sonarr, Prowlarr, Bazarr, SABnzbd, Jellyfin). Other devices on the network need the password in password.txt;
 this Mac itself doesn't. API keys stay in here; only the fields picked out below reach the browser.
 
     python3 server.py          watch this Mac
@@ -54,12 +54,16 @@ BAZARR_YAML = where("bazarr_config", "/Applications/bazarr/data/config/config.ya
 SAB_INI = where("sabnzbd_config", "~/Library/Application Support/SABnzbd/sabnzbd.ini")
 # Home Cinema is the author's own player; leave this out of config.json and that part simply stays hidden.
 CINEMA = os.path.expanduser(CONFIG["home_cinema_dir"]) if CONFIG.get("home_cinema_dir") else None
+# Jellyfin: an API key from Dashboard > API Keys, in config.json or the JELLYFIN_API_KEY environment variable. No key, no Jellyfin.
+JELLYFIN_URL = (CONFIG.get("jellyfin_url") or os.environ.get("JELLYFIN_URL") or "http://127.0.0.1:8096").rstrip("/")
+JELLYFIN_KEY = (CONFIG.get("jellyfin_api_key") or os.environ.get("JELLYFIN_API_KEY") or "").strip()
 
 PASSWORD_FILE = os.path.join(HERE, "password.txt")  # change it any time; it applies straight away and signs everyone out
 SECRET_FILE = os.path.join(HERE, ".secret")
 VENDOR = {"/vendor/three.module.min.js": "three.module.min.js", "/vendor/OrbitControls.js": "OrbitControls.js", "/vendor/RoundedBoxGeometry.js": "RoundedBoxGeometry.js"}  # the 3D office's library, served as-is
 POSTER_HOSTS = ("https://image.tmdb.org/", "https://artworks.thetvdb.com/")
 poster_cache = {}
+jellyfin_items = {}  # Jellyfin image ids the dashboard has handed out -> image tag; only these can be fetched through /poster
 MAX_ATTEMPTS = 8
 LOCKOUT = 5 * 60
 
@@ -69,7 +73,7 @@ VIDEO = (".mkv", ".mp4", ".avi", ".m4v", ".mov", ".mpg", ".ts", ".wmv")
 WATCHING_WINDOW = 90 * 1000  # Home Cinema saves progress while playing, so a save this recent means it is on now
 
 history = {k: deque(maxlen=KEEP) for k in ("t", "cpu", "mem", "rx", "tx", "disk", "sab")}
-state = {"system": {}, "services": [], "cinema": {}, "sab": {"ok": False}, "radarr": {"ok": False}, "sonarr": {"ok": False}, "prowlarr": {"ok": False}, "bazarr": {"ok": False}, "activity": {}, "network": {}, "disks": []}
+state = {"system": {}, "services": [], "cinema": {}, "jellyfin": {"enabled": bool(JELLYFIN_KEY)}, "sab": {"ok": False}, "radarr": {"ok": False}, "sonarr": {"ok": False}, "prowlarr": {"ok": False}, "bazarr": {"ok": False}, "activity": {}, "network": {}, "disks": []}
 
 
 def sh(*args, timeout=5):
@@ -336,6 +340,59 @@ def read_cinema():
     state["cinema"] = {"enabled": True, "ok": bool(status), "converting": len(ffmpeg), "profiles": [p.get("name") for p in cfg.get("profiles", [])], "streams": streams, "watched": watched[:5], "missing_drives": missing}
 
 
+def jellyfin_get(path, timeout=4):
+    auth = f'MediaBrowser Client="Media Server Dashboard", Device="Dashboard", DeviceId="media-server-dashboard", Version="1.0", Token="{JELLYFIN_KEY}"'
+    return urllib.request.urlopen(urllib.request.Request(JELLYFIN_URL + path, headers={"Authorization": auth, "X-Emby-Token": JELLYFIN_KEY}), timeout=timeout)
+
+
+def jellyfin_image(*pairs):
+    """The first (id, tag) with a tag, as a /poster link that keeps the API key on this side."""
+    for item_id, tag in pairs:
+        if item_id and tag and re.fullmatch(r"[0-9a-fA-F-]{32,36}", item_id):
+            jellyfin_items[item_id] = tag
+            while len(jellyfin_items) > 200:
+                jellyfin_items.pop(next(iter(jellyfin_items)))
+            return f"/poster?jf={item_id}"
+    return None
+
+
+def read_jellyfin():
+    """What Jellyfin is playing right now, one entry per playing session."""
+    if not JELLYFIN_KEY:
+        return
+    try:
+        with jellyfin_get("/Sessions?activeWithinSeconds=600") as r:
+            sessions = json.load(r)
+    except (OSError, ValueError):
+        state["jellyfin"] = {"enabled": True, "ok": False, "streams": []}
+        return
+    streams = []
+    for s in sessions if isinstance(sessions, list) else []:
+        it, ps = s.get("NowPlayingItem"), s.get("PlayState") or {}
+        if not it:
+            continue
+        kind = it.get("Type")
+        if kind == "Episode":
+            title = it.get("SeriesName") or it.get("Name")
+            num = f"S{it.get('ParentIndexNumber') or 0:02d}E{it.get('IndexNumber') or 0:02d}" if it.get("IndexNumber") is not None else ""
+            sub = " · ".join(x for x in (num, it.get("Name")) if x)
+            art = jellyfin_image((it.get("SeriesId"), it.get("SeriesPrimaryImageTag")), (it.get("Id"), (it.get("ImageTags") or {}).get("Primary")))
+        elif kind == "Audio":
+            title, sub = it.get("Name"), ", ".join(it.get("Artists") or []) or it.get("Album") or ""
+            art = jellyfin_image((it.get("Id"), (it.get("ImageTags") or {}).get("Primary")), (it.get("AlbumId"), it.get("AlbumPrimaryImageTag")))
+        else:
+            title, sub = it.get("Name"), str(it.get("ProductionYear") or "")
+            art = jellyfin_image((it.get("Id"), (it.get("ImageTags") or {}).get("Primary")))
+        length, at = it.get("RunTimeTicks") or 0, ps.get("PositionTicks") or 0
+        streams.append({
+            "title": title or "Something", "sub": sub, "kind": kind, "who": s.get("UserName"), "device": s.get("DeviceName"), "client": s.get("Client"),
+            "pct": round(at / length * 100) if length else None, "paused": bool(ps.get("IsPaused")), "poster": art,
+            "method": "Transcoding" if ps.get("PlayMethod") == "Transcode" else "Direct play" if ps.get("PlayMethod") else None,
+        })
+    streams.sort(key=lambda x: (x["paused"], x["who"] or "", x["title"]))
+    state["jellyfin"] = {"enabled": True, "ok": True, "streams": streams}
+
+
 def poster(item):
     for img in item.get("images", []):
         if img.get("coverType") == "poster" and str(img.get("remoteUrl", "")).startswith("https://"):
@@ -591,6 +648,8 @@ def alerts():
             add("error", s["name"], "Not running")
         elif state[{"Home Cinema": "cinema", "SABnzbd": "sab"}.get(s["name"], s["name"].lower())].get("ok") is False:
             add("error", s["name"], "Running, but not responding")
+    if state["jellyfin"].get("ok") is False:
+        add("error", "Jellyfin", f"Not responding at {JELLYFIN_URL}, or the API key was turned down")
     for d in state["cinema"].get("missing_drives", []):
         add("error", "Drives", f"{d} is not connected, so Home Cinema can't see what's on it")
     for name in ("Radarr", "Sonarr", "Bazarr", "Prowlarr"):
@@ -710,7 +769,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def poster(self):
         """Posters for the office board, fetched here so the 3D page can draw them (the image sites don't allow that directly)."""
-        url = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("u", [""])[0]
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        if "jf" in query:
+            return self.jellyfin_poster(query["jf"][0])
+        url = query.get("u", [""])[0]
         if DEMO and url.startswith("/demo-poster/"):
             return self.reply(200, demo.poster(url), "image/svg+xml")
         if not url.startswith(POSTER_HOSTS):
@@ -725,6 +787,23 @@ class Handler(BaseHTTPRequestHandler):
             while len(poster_cache) > 40:
                 poster_cache.pop(next(iter(poster_cache)))
         body, ctype = poster_cache[url]
+        self.reply(200, body, ctype)
+
+    def jellyfin_poster(self, item_id):
+        """Jellyfin artwork, fetched here because it needs the API key. Only ids from what's playing are allowed."""
+        tag = jellyfin_items.get(item_id)
+        if DEMO or not tag:
+            return self.reply(400, b"Not a poster", "text/plain")
+        key = f"jf:{item_id}:{tag}"
+        if key not in poster_cache:
+            try:
+                with jellyfin_get(f"/Items/{item_id}/Images/Primary?fillHeight=750&quality=90&tag={urllib.parse.quote(tag)}", timeout=8) as r:
+                    poster_cache[key] = (r.read(2_000_000), r.headers.get("Content-Type", "image/jpeg"))
+            except OSError:
+                return self.reply(502, b"Poster unavailable", "text/plain")
+            while len(poster_cache) > 40:
+                poster_cache.pop(next(iter(poster_cache)))
+        body, ctype = poster_cache[key]
         self.reply(200, body, ctype)
 
     def do_POST(self):
@@ -766,6 +845,7 @@ if __name__ == "__main__":
     threading.Thread(target=system_loop, daemon=True).start()
     looped(5, read_sab)
     looped(5, read_cinema)
+    looped(3, read_jellyfin)
     looped(5, read_radarr)
     looped(5, read_sonarr)
     looped(5, read_services)

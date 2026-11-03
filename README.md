@@ -26,6 +26,19 @@ Then open http://localhost:8900. Demo mode reads nothing from your Mac, which al
 
 The dashboard finds each app's port and API key in that app's own settings file, in the usual macOS places. If yours live somewhere else, copy `config.example.json` to `config.json` and change the paths. You can also change the title and the port there.
 
+### Jellyfin: what's playing
+
+Give the dashboard a Jellyfin API key and the TV above the break-room couch becomes a slideshow of everything playing right now: the poster, the title (or show and episode), who is watching on which device, and how far in they are. With more than one thing playing it moves on every 7 seconds; click the TV to skip ahead. The dashboard's "Now playing" card lists the same.
+
+1. In Jellyfin, open **Dashboard → API Keys** and add a key called "Media Server Dashboard".
+2. Put it in `config.json` (which never gets committed):
+   ```json
+   { "jellyfin_api_key": "your-key", "jellyfin_url": "http://127.0.0.1:8096" }
+   ```
+   `jellyfin_url` is only needed if Jellyfin isn't on this Mac at the usual port. The `JELLYFIN_API_KEY` and `JELLYFIN_URL` environment variables work too.
+
+The key stays on the server: posters are fetched through the dashboard, and only for titles that are playing.
+
 ### Start it automatically
 
 ```bash
@@ -50,7 +63,7 @@ Don't expose the port to the internet. It's meant for your home network only.
 
 - macOS only: it reads system stats with `iostat`, `vm_stat`, `netstat`, `df` and `lsof`.
 - The network meters on the racks and the whiteboard read full at 100 Mbit/s.
-- There is a hidden integration for "Home Cinema", the author's own player, which drives the "who's watching" TV in the break room. It stays off unless `home_cinema_dir` is set. Plex or Jellyfin support would be a welcome contribution.
+- There is a hidden integration for "Home Cinema", the author's own player, which drives the "who's watching" TV in the break room. It stays off unless `home_cinema_dir` is set. Plex support would be a welcome contribution.
 - The 3D office uses [three.js](https://threejs.org) (MIT), bundled in `vendor/`.
 
 ## License

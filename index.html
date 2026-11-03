@@ -113,7 +113,7 @@ h3:first-child { margin-top: 0; }
   </div>
   <section class="row" id="services" aria-label="Services"></section>
   <div class="row r3" id="middle">
-    <section class="card" id="cinemaCard"><h2>Home Cinema</h2><div id="cinema"></div></section>
+    <section class="card" id="cinemaCard"><h2 id="cinemaTitle">Home Cinema</h2><div id="cinema"></div></section>
     <section class="card"><h2>Download queue</h2><div id="queue"></div></section>
     <section class="card"><h2>Drives</h2><div id="drives"></div></section>
   </div>
@@ -279,11 +279,15 @@ function render(d) {
   const missing = (cin.missing_drives || []).map((n) => `<div class="meter"><div class="top"><span>${esc(n)}</span>${pill('error', 'Not connected')}</div><div class="track"></div></div>`).join('');
   put('drives', d.disks.map((x) => { const used = (x.total - x.free) / x.total * 100; return `<div class="meter"><div class="top"><span>${esc(x.name)}</span><span class="muted small">${bytes(x.free)} free of ${bytes(x.total, 0)}</span></div><div class="track"><div class="fill ${level(used)}" style="width:${used}%"></div></div></div>`; }).join('') + missing);
 
-  // Home Cinema is optional; without it the queue and drives share the row.
-  $('cinemaCard').hidden = !cin.enabled;
-  $('middle').className = cin.enabled ? 'row r3' : 'row r2';
-  put('cinema', cin.watched ? `<h3>Open right now</h3>${rows(cin.streams, (t) => `<li><span class="t" title="${esc(t.title)}">${esc(t.title)}</span><span class="m">${t.who ? `${who(t.who)}${t.pct}%` : esc(t.service || 'Unknown')}</span></li>`, 'Nothing is playing')}
-    <h3>Latest watched</h3>${rows(cin.watched, (w) => `<li><span class="t" title="${esc(w.title)}">${esc(w.title)}</span><span class="m">${who(w.who)}${w.pct}% · ${esc(ago(w.when))}</span></li>`, 'Nothing watched yet')}` : '<div class="empty">Reading…</div>');
+  // Home Cinema and Jellyfin are optional; without either the queue and drives share the row.
+  const jf = d.jellyfin || {}, playing = cin.enabled || jf.enabled;
+  $('cinemaCard').hidden = !playing;
+  $('middle').className = playing ? 'row r3' : 'row r2';
+  put('cinemaTitle', cin.enabled && jf.enabled ? 'Now playing' : cin.enabled ? 'Home Cinema' : 'Jellyfin');
+  const jfRows = !jf.enabled ? '' : `${cin.enabled ? '<h3>Jellyfin</h3>' : '<h3>Playing now</h3>'}${jf.ok === false ? '<div class="empty">Jellyfin is not responding</div>' : rows(jf.streams || [], (t) => `<li><span class="t" title="${esc([t.title, t.sub].filter(Boolean).join(' · '))}">${esc(t.title)}${t.sub ? ` <span class="muted">${esc(t.sub)}</span>` : ''}</span><span class="m">${esc([t.who, t.paused ? 'paused' : t.pct != null ? t.pct + '%' : ''].filter(Boolean).join(' · '))}</span></li>`, 'Nothing is playing')}`;
+  if (!cin.enabled) put('cinema', jfRows);
+  else put('cinema', jfRows + (cin.watched ? `<h3>Open right now</h3>${rows(cin.streams, (t) => `<li><span class="t" title="${esc(t.title)}">${esc(t.title)}</span><span class="m">${t.who ? `${who(t.who)}${t.pct}%` : esc(t.service || 'Unknown')}</span></li>`, 'Nothing is playing')}
+    <h3>Latest watched</h3>${rows(cin.watched, (w) => `<li><span class="t" title="${esc(w.title)}">${esc(w.title)}</span><span class="m">${who(w.who)}${w.pct}% · ${esc(ago(w.when))}</span></li>`, 'Nothing watched yet')}` : '<div class="empty">Reading…</div>'));
 
   put('queue', !sab.ok ? '<div class="empty">SABnzbd is not responding</div>' : `<div class="tiles">${tile(bytes(sab.totals.day), 'Today')}${tile(bytes(sab.totals.week), 'This week')}${tile(bytes(sab.totals.month), 'This month')}${tile(bytes(sab.totals.total), 'All time')}</div>
     <h3>In SABnzbd</h3>${rows(sab.queue.slice(0, 8), (q) => `<li><span class="t" title="${esc(q.title)}">${esc(q.title)}</span><span class="m">${Math.round(q.pct)}% · ${esc(q.left)}</span></li>`, 'Queue is empty')}`);

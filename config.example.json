@@ -5,5 +5,7 @@
   "sonarr_config": "~/.config/Sonarr/config.xml",
   "prowlarr_config": "~/Library/Application Support/Prowlarr/config.xml",
   "bazarr_config": "/Applications/bazarr/data/config/config.yaml",
-  "sabnzbd_config": "~/Library/Application Support/SABnzbd/sabnzbd.ini"
+  "sabnzbd_config": "~/Library/Application Support/SABnzbd/sabnzbd.ini",
+  "jellyfin_url": "http://127.0.0.1:8096",
+  "jellyfin_api_key": ""
 }

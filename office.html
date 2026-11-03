@@ -1342,8 +1342,13 @@ function render(d) {
   });
   showPosters(recent);
   // the TV's slides: everything Jellyfin is playing, then anything open in Home Cinema
+  // a slide without artwork borrows Radarr's or Sonarr's poster for the same title, when there is one
+  const known = [...(d.radarr.recent || []), ...(d.sonarr.recent || [])].filter((m) => m.poster);
+  const norm = (t) => String(t || '').toLowerCase().replace(/\s*\(\d{4}\)$/, '').trim();
+  const art = (st) => st.poster || (known.find((m) => norm(m.title) === norm(st.title)) || {}).poster || null;
   const slides = [...((d.jellyfin && d.jellyfin.streams) || []),
-    ...streams.map((st) => ({ title: st.title, who: st.who || st.service, device: 'Home Cinema', pct: st.pct ?? null, poster: null, kind: 'Movie' }))];
+    ...streams.map((st) => ({ title: st.title, who: st.who || st.service, device: 'Home Cinema', pct: st.pct ?? null, poster: null, kind: 'Movie' }))]
+    .map((st) => ({ ...st, poster: art(st) }));
   showOnTV(slides, viewers);
   // the parcel pile: hover it to see what's next
   pileLabel.dataset.tip = queueText(sab);

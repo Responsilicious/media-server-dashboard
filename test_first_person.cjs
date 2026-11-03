@@ -1,0 +1,17 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync(__dirname+'/office.html','utf8');
+const walk=source.slice(source.indexOf('function walkable('),source.indexOf('function enterFirstPerson('));
+const move=source.slice(source.indexOf('function updateFirstPerson('),source.indexOf('function inspectFirstPerson('));
+const sandbox={obstacles:[{x0:-1,x1:1,z0:-1,z1:1}],fp:{person:{up:true,root:{position:{x:0,z:3},rotation:{}}},keys:new Set(),yaw:0,pitch:0},eyeCamera:{position:{set(){}},rotation:{set(){}}},leaveFirstPerson(){throw Error('Unexpected exit');}};
+vm.createContext(sandbox);vm.runInContext(walk+'\n'+move+'\nthis.api={walkable,standingSpot,updateFirstPerson};',sandbox);
+const {api,fp}=sandbox;
+assert.equal(api.walkable(0,0),false);assert.equal(api.walkable(12,3),false);assert.equal(api.walkable(3,3),true);
+const spot=api.standingSpot(0,0);assert.ok(spot && api.walkable(spot.x,spot.z),'seated spawn moves out of furniture');
+fp.keys.add('KeyW');for(let i=0;i<100;i++)api.updateFirstPerson(.1);
+assert.ok(fp.person.root.position.z>=1.22,'cannot cross furniture');
+fp.person.root.position={x:3,z:3};fp.keys.add('KeyD');api.updateFirstPerson(.1);
+assert.ok(Math.abs(Math.hypot(fp.person.root.position.x-3,fp.person.root.position.z-3)-.22)<1e-9,'diagonal speed normalized');
+fp.keys.clear();fp.keys.add('KeyD');fp.person.root.position={x:11.5,z:3};for(let i=0;i<100;i++)api.updateFirstPerson(.1);
+assert.ok(fp.person.root.position.x<=11.6,'cannot leave room');
+fp.keys.clear();const before={...fp.person.root.position};api.updateFirstPerson(.1);assert.deepEqual(fp.person.root.position,before,'released keys stop movement');
+console.log('First-person collision, safe spawn, diagonal speed, room bounds and key release checks passed');

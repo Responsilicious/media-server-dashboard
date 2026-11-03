@@ -115,3 +115,11 @@ MIT
 ## Tests
 
 Run `python3 -m unittest -v test_support` for platform selection, disk filtering and Jellyfin session handling. Platform-selection tests check collector routing for both operating systems; they do not substitute for running the collectors on real macOS hardware.
+
+## Walk around the office
+
+Click a visible character or its name tag to take control in first person. Name tags also support Enter/Space from keyboard focus. Use **WASD** to walk, **Shift** to hurry, and the mouse to look. If the browser does not allow pointer lock, hold the left mouse button and drag to look. Arrow keys provide an alternative: Up/Down walk and Left/Right turn.
+
+Aim the crosshair at characters, posters, the TV or download parcels to inspect them. Large furniture and room boundaries block movement. A seated character starts on nearby clear floor. The selected character pauses its normal routine while you explore; live service data and TV updates continue. Press **Escape** or use **Return to office** to restore the overhead view and the character's current work/break role. Losing window focus stops movement; hiding the tab or the selected service going offline returns to the overview. These controls are intended for a keyboard and mouse.
+
+The feature is entirely local to the browser and adds no external assets or network requests. To check movement constraints, run `node test_first_person.cjs` (Node.js is only needed for this test).

@@ -54,13 +54,21 @@ header a { margin-left: auto; color: var(--text); text-decoration: none; font-si
 .pile { pointer-events: auto; cursor: default; position: absolute; left: 0; top: 0; padding: 2px 8px; border-radius: 10px; background: rgba(255, 255, 255, .9); color: #4a3520; font-size: 11px; font-weight: 600; white-space: nowrap; }
 #tip { position: fixed; display: none; pointer-events: none; z-index: 100000; max-width: 340px; overflow-wrap: anywhere; background: rgba(40, 42, 54, .85); border-radius: 12px; padding: 7px 11px; font-size: 12px; white-space: pre-line; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+#fpPanel { position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:5; padding:12px 18px; border:1px solid var(--edge); border-radius:14px; background:rgba(15,19,34,.93); text-align:center; max-width:calc(100% - 30px); width:max-content; }
+#fpPanel[hidden], #crosshair[hidden], #fpInspect[hidden], #labels[hidden] { display:none; }
+#fpPanel strong, #fpPanel span { display:block; }
+#fpPanel span { color:var(--muted); font-size:12px; margin:5px 0 9px; }
+#fpExit { border:1px solid var(--edge); background:#303951; color:white; padding:6px 12px; border-radius:8px; cursor:pointer; }
+#crosshair { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); pointer-events:none; color:rgba(255,255,255,.8); font:24px monospace; text-shadow:0 1px 3px black; }
+#fpInspect { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); white-space:pre-line; text-align:center; padding:10px 18px; border-radius:12px; background:rgba(15,19,34,.9); max-width:80%; pointer-events:none; }
+[data-person] { cursor:pointer; }
 </style>
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
 </head>
 <body>
 <div id="page">
   <header><h1>The Office</h1><span id="summary"></span><a class="glass" href="/">← Dashboard</a></header>
-  <div id="scene"><div id="labels"></div><div class="hint">Drag to turn the room · scroll or pinch to zoom</div></div>
+  <div id="scene"><div id="labels"></div><div class="hint">Click a character to walk as them · drag to turn · scroll to zoom</div></div>
   <div class="sr" id="srStatus" aria-live="polite"></div>
 </div>
 <div id="tip"></div>
@@ -81,7 +89,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 host.prepend(renderer.domElement);
 const scene = new THREE.Scene();
-const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+let camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
 camera.position.set(29, 20, 32);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 1.0, 0);
@@ -113,6 +121,7 @@ for (const x of [-12.4, 12.4]) for (const z of [-9.4, 9.4]) ROOM_CORNERS.push(ne
 ROOM_CORNERS.push(new THREE.Vector3(-12.4, 3.65, -9.4), new THREE.Vector3(12.4, 3.65, -9.4), new THREE.Vector3(-12.4, 3.65, 9.4));
 const corner = new THREE.Vector3();
 function fitView() {
+  if (camera.isPerspectiveCamera) return;
   const w = host.clientWidth, h = host.clientHeight, aspect = w / h;
   camera.updateMatrixWorld();
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -130,8 +139,13 @@ function fitView() {
 controls.addEventListener('change', fitView);
 function resize() {
   const w = host.clientWidth, h = host.clientHeight;
-  camera.lookAt(controls.target);
-  fitView();
+  if (camera.isPerspectiveCamera) {
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  } else {
+    camera.lookAt(controls.target);
+    fitView();
+  }
   renderer.setSize(w, h, false);
   outline.uniforms.res.value.set(w, h);
 }
@@ -1090,6 +1104,8 @@ function makePerson(name, i) {
   label.querySelector('.tag').dataset.person = name;
   label.querySelector('b').textContent = name;
   $('labels').append(label);
+  label.querySelector('.tag').setAttribute('role','button');
+  label.querySelector('.tag').setAttribute('aria-label','Walk as '+name);
   p.label = label;
   return p;
 }
@@ -1099,6 +1115,7 @@ function seatOf(p) { const d = DESKS[p.i]; return { at: [d[0], d[1] + 0.88], fac
 function place(p, spot) { p.root.position.set(spot.at[0], 0, spot.at[1]); p.root.rotation.y = spot.face; p.pose = spot; }
 
 function send(p, where, instant) {
+  if (fp.person === p) { fp.desired=where; return; }
   if (p.where === where) return;
   const from = p.where;
   p.where = where;
@@ -1261,7 +1278,7 @@ function render(d) {
 
   const sab = d.sab, busy = d.services.filter((s) => s.up && s.task).length, down = d.services.filter((s) => !s.up).length;
   $('summary').textContent = `${busy} working · ${d.services.length - busy - down} on a break${down ? ` · ${down} out` : ''}`;
-  $('srStatus').textContent = d.services.map((s) => `${s.name}: ${!s.up ? 'not running' : s.task || 'on a break'}`).join('. ');
+  if (!fp.person) $('srStatus').textContent = d.services.map((s) => `${s.name}: ${!s.up ? 'not running' : s.task || 'on a break'}`).join('. ');
   const queued = sab.ok ? sab.queueTotal : 0;
   parcels.forEach((b, i) => { b.visible = i < queued; });
   pileLabel.textContent = queued ? `📦 ${queued} in queue` : '';
@@ -1306,6 +1323,135 @@ function showTip(text, x, y) {
   tip.style.top = Math.max(8, y - tip.offsetHeight - 12) + 'px';
 }
 const hideTip = () => { tip.style.display = 'none'; };
+// ---------- first-person character control ----------
+const overviewCamera = camera;
+const eyeCamera = new THREE.PerspectiveCamera(72, 1, 0.04, 100);
+const fp = { person: null, yaw: 0, pitch: 0, keys: new Set(), desired: null, locked: false, lastInspect: 0 };
+const fpPanel = document.createElement('div');
+fpPanel.id = 'fpPanel'; fpPanel.hidden = true;
+fpPanel.innerHTML = '<strong id="fpName"></strong><span id="fpHelp">WASD to walk · mouse or drag to look · Shift to hurry · Esc to leave</span><button type="button" id="fpExit">Return to office</button>';
+host.append(fpPanel);
+const crosshair = document.createElement('div'); crosshair.id = 'crosshair'; crosshair.hidden = true; crosshair.textContent = '+'; host.append(crosshair);
+const inspect = document.createElement('div'); inspect.id = 'fpInspect'; inspect.hidden = true; host.append(inspect);
+renderer.domElement.tabIndex = 0;
+renderer.domElement.setAttribute('aria-label', 'Office view. Click a character to walk as them.');
+const obstacles = DESKS.map(([x,z]) => ({ x0:x-1.25, x1:x+1.25, z0:z-.58, z1:z+.58 }));
+scene.updateMatrixWorld(true);
+for (const object of [couch, ct, k, fridge, pp]) {
+  const bounds = new THREE.Box3().setFromObject(object);
+  obstacles.push({x0:bounds.min.x,x1:bounds.max.x,z0:bounds.min.z,z1:bounds.max.z});
+}
+for (const [x,z] of [[9.75,3.75],[10.7,5.9],[8.5,6.4]]) obstacles.push({x0:x-.7,x1:x+.7,z0:z-.7,z1:z+.7});
+// Keep feet inside the room and clear of large furniture, including racks.
+obstacles.push({x0:-12,x1:-10.9,z0:5.2,z1:8.7});
+for (const rack of driveRacks) {
+  const b = new THREE.Box3().setFromObject(rack.g);
+  obstacles.push({x0:b.min.x,x1:b.max.x,z0:b.min.z,z1:b.max.z});
+}
+function walkable(x,z) {
+  const radius = .22;
+  return x >= -11.6 && x <= 11.6 && z >= -8.6 && z <= 8.6 &&
+    !obstacles.some(b => x > b.x0-radius && x < b.x1+radius && z > b.z0-radius && z < b.z1+radius);
+}
+function standingSpot(x,z) {
+  if (walkable(x,z)) return {x,z};
+  for(let radius=.15;radius<=3;radius+=.15) for(let i=0;i<32;i++) {
+    const nx=x+Math.cos(i*Math.PI/16)*radius,nz=z+Math.sin(i*Math.PI/16)*radius;
+    if(walkable(nx,nz)) return {x:nx,z:nz};
+  }
+  return null;
+}
+function enterFirstPerson(person) {
+  if (!person?.up || fp.person) return;
+  const spot=standingSpot(person.root.position.x,person.root.position.z);
+  if (!spot) return;
+  fp.person=person; fp.desired=person.where || 'break'; fp.yaw=person.root.rotation.y+Math.PI; fp.pitch=0;
+  person.path=[]; person.pose=null; person.body.visible=false;
+  person.root.position.set(spot.x,0,spot.z);
+  controls.enabled=false; camera=eyeCamera;
+  fpPanel.hidden=crosshair.hidden=false; $('labels').hidden=true; host.querySelector('.hint').hidden=true;
+  $('fpName').textContent='Walking as '+person.name;
+  $('srStatus').textContent='Controlling '+person.name+'. WASD to walk, mouse or drag to look, Escape to return.';
+  hideTip(); renderer.domElement.focus({preventScroll:true}); resize(); updateFirstPerson(0);
+  try { const promise=renderer.domElement.requestPointerLock?.(); promise?.catch(()=>{}); } catch {}
+}
+function leaveFirstPerson() {
+  const person=fp.person;
+  if(!person) return;
+  fp.person=null; fp.keys.clear(); fp.locked=false;
+  if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
+  person.body.visible=true; person.where=null;
+  if(person.up) send(person,fp.desired || 'break',true);
+  camera=overviewCamera; controls.enabled=true;
+  fpPanel.hidden=crosshair.hidden=inspect.hidden=true; $('labels').hidden=false; host.querySelector('.hint').hidden=false;
+  renderer.domElement.style.cursor=''; hideTip(); resize();
+}
+function updateFirstPerson(dt) {
+  if(!fp.person) return;
+  if(!fp.person.up) { leaveFirstPerson(); return; }
+  if(fp.keys.has('ArrowLeft')) fp.yaw+=dt*1.7;
+  if(fp.keys.has('ArrowRight')) fp.yaw-=dt*1.7;
+  let forward=Number(fp.keys.has('KeyW')||fp.keys.has('ArrowUp'))-Number(fp.keys.has('KeyS')||fp.keys.has('ArrowDown'));
+  let side=Number(fp.keys.has('KeyD'))-Number(fp.keys.has('KeyA'));
+  const length=Math.hypot(forward,side)||1;
+  const speed=fp.keys.has('ShiftLeft')||fp.keys.has('ShiftRight') ? 3.8 : 2.2;
+  const dx=(-Math.sin(fp.yaw)*forward+Math.cos(fp.yaw)*side)/length*speed*dt;
+  const dz=(-Math.cos(fp.yaw)*forward-Math.sin(fp.yaw)*side)/length*speed*dt;
+  const position=fp.person.root.position;
+  // Small substeps avoid walking through thin furniture after a slow frame.
+  const steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.08));
+  for(let i=0;i<steps;i++) {
+    if(walkable(position.x+dx/steps,position.z)) position.x+=dx/steps;
+    if(walkable(position.x,position.z+dz/steps)) position.z+=dz/steps;
+  }
+  fp.person.root.rotation.y=fp.yaw+Math.PI;
+  eyeCamera.position.set(position.x,1.52,position.z);
+  eyeCamera.rotation.set(fp.pitch,fp.yaw,0,'YXZ');
+}
+function inspectFirstPerson() {
+  if(!fp.person) return;
+  ray.setFromCamera(new THREE.Vector2(0,0),eyeCamera);
+  const hit=ray.intersectObjects([boardScreen,...wallPosters.map(p=>p.mesh),...Object.values(people).filter(p=>p!==fp.person&&p.root.visible).map(p=>p.root),...parcels.filter(p=>p.visible)],true)[0];
+  let text='';
+  if(hit && hit.distance<12) {
+    let object=hit.object;
+    while(object && !object.userData.person && !object.userData.poster && !parcels.includes(object) && object!==boardScreen) object=object.parent;
+    if(object===boardScreen) { const s=tv.streams[tv.index]; text=s ? `${s.who} · ${s.paused?'Paused':'Playing'}\n${s.title}` : tv.error || 'Nothing playing'; }
+    else if(object?.userData.person) text=doing(object.userData.person);
+    else if(object?.userData.poster) text=object.userData.poster;
+    else if(object) text=queueText(latestSab);
+  }
+  inspect.textContent=text; inspect.hidden=!text;
+}
+$('fpExit').addEventListener('click',leaveFirstPerson);
+const movementKeys=new Set(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','ShiftLeft','ShiftRight']);
+document.addEventListener('keydown',e=>{
+  if(!fp.person) return;
+  if(e.code==='Escape') { e.preventDefault(); leaveFirstPerson(); return; }
+  if(movementKeys.has(e.code)) { e.preventDefault(); fp.keys.add(e.code); }
+});
+document.addEventListener('keyup',e=>fp.keys.delete(e.code));
+addEventListener('blur',()=>fp.keys.clear());
+document.addEventListener('visibilitychange',()=>{if(document.hidden) leaveFirstPerson();});
+document.addEventListener('pointerlockchange',()=>{
+  const locked=document.pointerLockElement===renderer.domElement;
+  if(fp.locked&&!locked) leaveFirstPerson();
+  fp.locked=locked;
+  if(locked && !fp.person) document.exitPointerLock();
+});
+document.addEventListener('mousemove',e=>{
+  if(!fp.person || (!fp.locked && !(e.buttons&1))) return;
+  fp.yaw-=e.movementX*.0025;
+  fp.pitch=Math.max(-1.35,Math.min(1.35,fp.pitch-e.movementY*.0025));
+});
+document.addEventListener('click',e=>{
+  const tag=e.target.closest('[data-person]');
+  if(tag&&!e.target.closest('.badge')) enterFirstPerson(people[tag.dataset.person]);
+});
+document.addEventListener('keydown',e=>{
+  if((e.code==='Enter'||e.code==='Space')&&e.target.matches('[data-person]')) {e.preventDefault();enterFirstPerson(people[e.target.dataset.person]);}
+});
+
 document.addEventListener('mouseover', (e) => {
   const el = e.target.closest && e.target.closest('[data-person], [data-tip]');
   if (!el) return;
@@ -1316,7 +1462,7 @@ document.addEventListener('mouseout', (e) => { if (e.target.closest && e.target.
 // pointing at a character in the room
 const ray = new THREE.Raycaster(), pointer = new THREE.Vector2();
 renderer.domElement.addEventListener('pointermove', (e) => {
-  if (e.buttons) return hideTip();
+  if (fp.person || e.buttons) return hideTip();
   const r = renderer.domElement.getBoundingClientRect();
   pointer.set((e.clientX - r.left) / r.width * 2 - 1, 1 - (e.clientY - r.top) / r.height * 2);
   ray.setFromCamera(pointer, camera);
@@ -1340,17 +1486,20 @@ renderer.domElement.addEventListener('pointerleave', hideTip);
 let tvPress = null;
 renderer.domElement.addEventListener('pointerdown', e => { tvPress = [e.clientX, e.clientY]; });
 renderer.domElement.addEventListener('pointerup', e => {
-  if (!tvPress || Math.hypot(e.clientX-tvPress[0], e.clientY-tvPress[1]) > 5) return;
+  if (fp.person || !tvPress || Math.hypot(e.clientX-tvPress[0], e.clientY-tvPress[1]) > 5) return;
   const r = renderer.domElement.getBoundingClientRect();
   pointer.set((e.clientX-r.left)/r.width*2-1, 1-(e.clientY-r.top)/r.height*2);
   ray.setFromCamera(pointer, camera);
-  if (ray.intersectObject(boardScreen)[0]) tvAdvance();
+  const hit=ray.intersectObjects([boardScreen,...Object.values(people).filter(p=>p.root.visible).map(p=>p.root)],true)[0];
+  if(hit?.object===boardScreen) tvAdvance();
+  else if(hit) { let object=hit.object; while(object&&!object.userData.person) object=object.parent; if(object) enterFirstPerson(object.userData.person); }
 });
 
 const clock = new THREE.Clock();
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime;
-  for (const p of Object.values(people)) if (p.root.visible) animate(p, dt, t);
+  for (const p of Object.values(people)) if (p.root.visible && p !== fp.person) animate(p, dt, t);
+  updateFirstPerson(dt);
   code.offset.y = (code.offset.y + dt * 0.08) % 1;
   rally(t);
   animateDataCenter(dt);
@@ -1360,9 +1509,10 @@ function frame() {
   const tvNow = performance.now();
   if (tv.streams.length > 1 && tvNow - tv.since >= TV_INTERVAL) tvAdvance();
   if (tvNow - tv.lastDraw > 100) { tv.lastDraw = tvNow; board.redraw({}); }
-  controls.update();
+  if (!fp.person) controls.update();
+  else if(tvNow-fp.lastInspect>120) { fp.lastInspect=tvNow; inspectFirstPerson(); }
   renderer.render(scene, camera);
-  placeLabels();
+  if (!fp.person) placeLabels();
   requestAnimationFrame(frame);
 }
 resize();

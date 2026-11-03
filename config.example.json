@@ -1,6 +1,9 @@
 {
   "title": "Media Server Dashboard",
   "port": 8900,
+  "system_platform": "auto",
+  "jellyfin_url": "",
+  "jellyfin_key_file": "./jellyfin-api-key",
   "radarr_config": "~/Library/Application Support/Radarr/config.xml",
   "sonarr_config": "~/.config/Sonarr/config.xml",
   "prowlarr_config": "~/Library/Application Support/Prowlarr/config.xml",

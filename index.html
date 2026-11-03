@@ -281,6 +281,7 @@ function render(d) {
 
   // Home Cinema is optional; without it the queue and drives share the row.
   $('cinemaCard').hidden = !cin.enabled;
+  $('cinemaCard').querySelector('h2').textContent = cin.source || 'Home Cinema';
   $('middle').className = cin.enabled ? 'row r3' : 'row r2';
   put('cinema', cin.watched ? `<h3>Open right now</h3>${rows(cin.streams, (t) => `<li><span class="t" title="${esc(t.title)}">${esc(t.title)}</span><span class="m">${t.who ? `${who(t.who)}${t.pct}%` : esc(t.service || 'Unknown')}</span></li>`, 'Nothing is playing')}
     <h3>Latest watched</h3>${rows(cin.watched, (w) => `<li><span class="t" title="${esc(w.title)}">${esc(w.title)}</span><span class="m">${who(w.who)}${w.pct}% · ${esc(ago(w.when))}</span></li>`, 'Nothing watched yet')}` : '<div class="empty">Reading…</div>');

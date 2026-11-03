@@ -43,6 +43,11 @@ def _settings():
 
 
 CONFIG = _settings()
+SYSTEM_PLATFORM = CONFIG.get("system_platform", "auto")
+if SYSTEM_PLATFORM == "auto":
+    SYSTEM_PLATFORM = "linux" if sys.platform.startswith("linux") else "macos"
+if SYSTEM_PLATFORM not in ("linux", "macos"):
+    raise ValueError('system_platform must be "auto", "linux" or "macos"')
 where = lambda key, default: os.path.expanduser(CONFIG.get(key) or default)
 PORT = int(CONFIG.get("port") or 8900)
 TITLE = CONFIG.get("title") or "Media Server Dashboard"
@@ -755,6 +760,13 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+
+if SYSTEM_PLATFORM == 'linux':
+    import linux_support
+    linux_support.install(sys.modules[__name__])
+
+import jellyfin_support
+jellyfin_support.install(sys.modules[__name__])
 
 if __name__ == "__main__":
     password()  # made on first run, so it's there to look up

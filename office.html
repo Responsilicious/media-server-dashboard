@@ -250,33 +250,79 @@ function fitText(g, text, max) {
   while (text.length > 1 && g.measureText(text + '…').width > max) text = text.slice(0, -1);
   return text.trimEnd() + '…';
 }
-// The TV above the couch shows who is watching: a circle per person that lights up while they watch.
-const BOARD_W = 560, BOARD_H = 260;
-function boardCircles(n) {
-  const gap = Math.min(150, (BOARD_W - 80) / Math.max(1, n)), x0 = BOARD_W / 2 - (gap * (n - 1)) / 2;
-  return Array.from({ length: n }, (_, i) => ({ cx: x0 + i * gap, cy: 132, r: 44 }));
+// One session per slide, including separate devices for the same viewer.
+const BOARD_W = 560, BOARD_H = 260, TV_INTERVAL = 8000;
+const tv = { streams: [], index: 0, since: performance.now(), lastDraw: 0, images: new Map(), error: null };
+function tvImage(url) {
+  if (!url) return null;
+  if (!tv.images.has(url)) {
+    const entry = { image: null }, image = new Image();
+    tv.images.set(url, entry);
+    image.onload = () => { entry.image = image; tv.lastDraw = 0; };
+    image.src = url;
+  }
+  return tv.images.get(url).image;
 }
-const board = canvasTexture(BOARD_W * 2, BOARD_H * 2, (g, w, h, d) => {
+function tvAdvance(step = 1) {
+  if (!tv.streams.length) return;
+  tv.index = (tv.index + step + tv.streams.length) % tv.streams.length;
+  tv.since = performance.now(); tv.lastDraw = 0;
+}
+function updateTV(streams, error) {
+  const selected = tv.streams[tv.index]?.id;
+  streams = streams.map((s, i) => ({ ...s, id: s.id || `${s.who}:${s.device}:${s.title}:${i}` }));
+  tv.streams = streams; tv.error = error;
+  const index = streams.findIndex(s => s.id === selected);
+  if (index < 0) { tv.index = 0; tv.since = performance.now(); }
+  else tv.index = index;
+  const urls = new Set(streams.map(s => s.artwork).filter(Boolean));
+  for (const url of tv.images.keys()) if (!urls.has(url)) tv.images.delete(url);
+  for (const url of urls) tvImage(url);
+  tv.lastDraw = 0;
+}
+const board = canvasTexture(BOARD_W * 2, BOARD_H * 2, (g, w, h, data) => {
   g.setTransform(2, 0, 0, 2, 0, 0);
   const font = '-apple-system, Helvetica, sans-serif';
-  g.fillStyle = '#1a1730'; g.fillRect(0, 0, BOARD_W, BOARD_H);
-  g.fillStyle = '#f6d77a'; g.font = `600 26px ${font}`; g.fillText('WATCHING', 28, 44);
-  if (!d) return;
-  boardCircles(d.viewers.length).forEach(({ cx, cy, r }, i) => {
-    const v = d.viewers[i];
-    g.save();
-    if (v.watching) { g.shadowColor = '#30d158'; g.shadowBlur = 28; }
-    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2);
-    g.fillStyle = v.watching ? '#30d158' : 'rgba(255,255,255,.08)'; g.fill();
+  g.fillStyle = '#121320'; g.fillRect(0, 0, BOARD_W, BOARD_H);
+  const stream = tv.streams[tv.index];
+  if (!stream) {
+    g.fillStyle = '#f6d77a'; g.font = `600 25px ${font}`; g.fillText('NOW WATCHING', 28, 48);
+    g.fillStyle = '#c9c5d6'; g.font = `500 21px ${font}`;
+    g.fillText(tv.error || 'Nothing playing', 28, 145); return;
+  }
+  const image = tvImage(stream.artwork);
+  if (image) {
+    const scale = Math.max(174 / image.width, BOARD_H / image.height);
+    g.save(); g.beginPath(); g.rect(0, 0, 174, BOARD_H); g.clip();
+    g.drawImage(image, (174 - image.width * scale) / 2, (BOARD_H - image.height * scale) / 2, image.width * scale, image.height * scale);
     g.restore();
-    g.lineWidth = 3; g.strokeStyle = v.watching ? '#9ff5b8' : 'rgba(255,255,255,.22)';
-    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillStyle = v.watching ? '#06240f' : 'rgba(233,236,242,.75)'; g.font = `700 34px ${font}`; g.fillText(v.initials, cx, cy + 2);
-    g.fillStyle = v.watching ? '#e9ecf2' : 'rgba(235,235,245,.6)'; g.font = `500 19px ${font}`; g.fillText(v.name, cx, cy + r + 24);
-    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
-  });
+  } else {
+    g.fillStyle = '#252944'; g.fillRect(0, 0, 174, BOARD_H);
+    g.fillStyle = '#8f95b8'; g.font = `600 22px ${font}`; g.fillText('MEDIA', 48, 138);
+  }
+  g.fillStyle = '#7fe3d0'; g.font = `600 15px ${font}`;
+  g.fillText(stream.paused ? 'PAUSED' : 'NOW PLAYING', 194, 35);
+  g.fillStyle = '#a9a8bd'; g.font = `400 14px ${font}`;
+  g.textAlign = 'right'; g.fillText(`${tv.index + 1} / ${tv.streams.length}`, 540, 35); g.textAlign = 'left';
+  g.save(); g.beginPath(); g.rect(194, 53, 345, 48); g.clip();
+  g.font = `600 29px ${font}`; g.fillStyle = '#ffffff';
+  const width = g.measureText(stream.title).width, overflow = Math.max(0, width - 345);
+  const elapsed = (performance.now() - tv.since) / 1000;
+  const travel = overflow / 45;
+  const phase = elapsed % (travel + 3);
+  const offset = overflow ? Math.min(overflow, Math.max(0, phase - 1.5) * 45) : 0;
+  g.fillText(stream.title, 194 - offset, 88); g.restore();
+  g.font = `500 22px ${font}`; g.fillStyle = '#eee9ff';
+  g.fillText(fitText(g, stream.who || 'Viewer', 345), 194, 128);
+  g.font = `400 17px ${font}`; g.fillStyle = '#a9a8bd';
+  g.fillText(fitText(g, stream.device || 'Jellyfin', 345), 194, 159);
+  g.fillStyle = '#303149'; g.fillRect(194, 187, 345, 5);
+  g.fillStyle = '#7fe3d0'; g.fillRect(194, 187, 345 * (stream.pct || 0) / 100, 5);
+  g.font = `500 16px ${font}`; g.fillStyle = '#ded9ec'; g.fillText(`${stream.pct || 0}%`, 194, 218);
+  g.font = `400 12px ${font}`; g.fillStyle = '#9593ac';
+  g.fillText(tv.streams.length > 1 ? 'Auto cycles · click TV for next stream' : 'Live playback', 194, 246);
 });
+
 rbox(2.95, 1.42, 0.1, 0.06, '#2a2640', 7.35, 2.15, -8.95);
 const boardScreen = plane(2.8, 1.3, new THREE.MeshStandardMaterial({ map: board, emissiveMap: board, emissive: '#ffffff', emissiveIntensity: 0.55 }), 7.35, 2.15, -8.89);
 
@@ -1228,14 +1274,8 @@ function render(d) {
   const recent = [...(d.radarr.recent || []).map((m) => ({ title: m.title, sub: m.year ? String(m.year) : '', poster: m.poster, when: m.when })),
     ...(d.sonarr.recent || []).map((m) => ({ title: m.title, sub: m.sub || '', poster: m.poster, when: m.when }))]
     .sort((a, b) => String(b.when).localeCompare(String(a.when))).slice(0, 4);
-  const viewers = (d.cinema.profiles || []).map((name) => {
-    const st = streams.find((x) => x.who === name);
-    return { name, initials: name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase(), watching: !!st, title: st && st.title };
-  });
   showPosters(recent);
-  const key = JSON.stringify(viewers);
-  if (key !== board.key) { board.key = key; board.redraw({ viewers }); }
-  board.viewers = viewers;
+  updateTV(streams, d.cinema.error);
   // the parcel pile: hover it to see what's next
   pileLabel.dataset.tip = queueText(sab);
 }
@@ -1282,11 +1322,9 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   ray.setFromCamera(pointer, camera);
   const hit = ray.intersectObjects([...Object.values(people).filter((p) => p.root.visible).map((p) => p.root), ...parcels.filter((b) => b.visible), ...wallPosters.map((p) => p.mesh), boardScreen], true)[0];
   if (hit && hit.object === boardScreen) {
-    const px = hit.uv.x * BOARD_W, py = (1 - hit.uv.y) * BOARD_H, viewers = board.viewers || [];
-    const i = boardCircles(viewers.length).findIndex(({ cx, cy, r }) => Math.hypot(px - cx, py - cy) <= r + 4);
-    const v = viewers[i];
-    renderer.domElement.style.cursor = v && v.watching ? 'pointer' : '';
-    return v && v.watching ? showTip(`${v.name} is watching\n${v.title}`, e.clientX, e.clientY) : hideTip();
+    const stream = tv.streams[tv.index];
+    renderer.domElement.style.cursor = stream ? 'pointer' : '';
+    return stream ? showTip(stream.who + ' · ' + (stream.paused ? 'Paused' : 'Playing') + '\n' + stream.title + '\nClick for next stream', e.clientX, e.clientY) : hideTip();
   }
   let o = hit && hit.object;
   while (o && !o.userData.person && !parcels.includes(o) && !o.userData.poster) o = o.parent;
@@ -1299,6 +1337,16 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 });
 renderer.domElement.addEventListener('pointerleave', hideTip);
 
+let tvPress = null;
+renderer.domElement.addEventListener('pointerdown', e => { tvPress = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!tvPress || Math.hypot(e.clientX-tvPress[0], e.clientY-tvPress[1]) > 5) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  pointer.set((e.clientX-r.left)/r.width*2-1, 1-(e.clientY-r.top)/r.height*2);
+  ray.setFromCamera(pointer, camera);
+  if (ray.intersectObject(boardScreen)[0]) tvAdvance();
+});
+
 const clock = new THREE.Clock();
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime;
@@ -1309,6 +1357,9 @@ function frame() {
   const now = new Date();
   const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   if (hhmm !== clockFace.shown) { clockFace.shown = hhmm; clockFace.redraw(hhmm); }
+  const tvNow = performance.now();
+  if (tv.streams.length > 1 && tvNow - tv.since >= TV_INTERVAL) tvAdvance();
+  if (tvNow - tv.lastDraw > 100) { tv.lastDraw = tvNow; board.redraw({}); }
   controls.update();
   renderer.render(scene, camera);
   placeLabels();
